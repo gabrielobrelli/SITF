@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Área do Empregador – SITF</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/img/icon_guia.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.dash-sidebar { background:var(--dark2); width:240px; }
+#pageContent { flex:1; padding:2rem; min-width:0; overflow-x:hidden; }
+.stat-row { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:1rem; margin-bottom:2rem; }
+.modal-box-wide { max-width:640px; }
+.vaga-manage-card { padding:1.25rem; display:flex; gap:1rem; align-items:flex-start; margin-bottom:0.85rem; }
+.cand-card { padding:1rem; display:flex; gap:0.85rem; align-items:center; margin-bottom:0.6rem; }
+.cand-actions { display:flex; gap:0.5rem; margin-left:auto; }
+.chat-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; height:480px; }
+.rating-form { background:var(--card); border:1px solid var(--border2); border-radius:var(--radius); padding:1.5rem; margin-bottom:1rem; }
+@media(max-width:768px){ .dash-layout{ flex-direction:column; } .dash-sidebar{ width:100%; height:auto; } #pageContent{ padding:1.25rem; } }
+</style>
+</head>
+<body>
+<div class="scroll-progress"><div class="scroll-bar" id="scrollBar"></div></div>
+<nav class="navbar">
+  <a href="index.html" class="nav-logo">
+    <img src="assets/img/logo1.jpeg" alt="SITF Logo">
+    <span class="sitf-text">SI<span>TF</span></span>
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Início</a>
+    <a href="vagas.html">Vagas</a>
+    <a href="freelancers.html">Freelancers</a>
+    <a href="como-funciona.html">Como Funciona</a>
+    <a href="empregador.html" class="active">Meu Painel</a>
+  </div>
+  <div class="nav-spacer"></div>
+  <div class="nav-actions" id="navUserArea">
+    <button class="btn btn-ghost btn-sm" onclick="openModal('login')">Entrar</button>
+    <button class="btn btn-primary btn-sm" onclick="openModal('register')">Cadastrar</button>
+  </div>
+  <button class="hamburger" onclick="toggleDrawer()"><span></span><span></span><span></span></button>
+</nav>
+<div class="mobile-drawer" id="mobileDrawer">
+  <a href="index.html">🏠 Início</a>
+  <a href="vagas.html">🔍 Vagas</a>
+  <a href="freelancers.html">👥 Freelancers</a>
+  <a href="empregador.html">🏢 Meu Painel</a>
+  <div class="sep"></div>
+  <button class="btn btn-ghost btn-full" onclick="openModal('login');toggleDrawer()">Entrar</button>
+</div>
+
+<div class="dash-layout" style="padding-top:var(--nav-h)">
+  <!-- SIDEBAR -->
+  <aside class="dash-sidebar">
+    <div id="sideProfile" style="padding:1.25rem;border-bottom:1px solid var(--border2);margin-bottom:0.75rem">
+      <div id="spAvatar" style="margin-bottom:0.6rem"></div>
+      <div id="spName" style="font-weight:700;font-size:0.9rem"></div>
+      <div id="spRole" style="font-size:0.75rem;color:var(--purple-light)">Empregador</div>
+    </div>
+    <div class="dash-nav-section">Principal</div>
+    <button class="dash-nav-item active" id="nav-dashboard" onclick="showPage('dashboard')"><span class="icon">📊</span> Dashboard</button>
+    <button class="dash-nav-item" id="nav-perfil" onclick="showPage('perfil')"><span class="icon">🏢</span> Meu Perfil</button>
+    <button class="dash-nav-item" id="nav-vagas" onclick="showPage('vagas')"><span class="icon">📋</span> Minhas Vagas</button>
+    <button class="dash-nav-item" id="nav-candidatos" onclick="showPage('candidatos')"><span class="icon">👥</span> Candidatos</button>
+    <div class="dash-nav-section">Comunicação</div>
+    <button class="dash-nav-item" id="nav-chat" onclick="showPage('chat')"><span class="icon">💬</span> Chat</button>
+    <div class="dash-nav-section">Avaliações</div>
+    <button class="dash-nav-item" id="nav-avaliar" onclick="showPage('avaliar')"><span class="icon">⭐</span> Avaliar Freelancers</button>
+    <button class="dash-nav-item" id="nav-minhas-avals" onclick="showPage('minhas-avals')"><span class="icon">📝</span> Avaliações Recebidas</button>
+    <div style="padding:1rem;margin-top:auto">
+      <button class="btn btn-danger btn-full btn-sm" onclick="logout()">Sair da conta</button>
+    </div>
+  </aside>
+
+  <!-- CONTENT -->
+  <div id="pageContent"></div>
+</div>
+
+<div id="modalsContainer"></div>
+<div class="toast" id="toast"><span class="toast-icon" id="toastIcon">✅</span><span id="toastMsg"></span></div>
+
+<!-- MODAL PUBLICAR VAGA -->
+<div class="modal-backdrop" id="modalNovaVaga">
+  <div class="modal-box modal-box-wide">
+    <div class="modal-header">
+      <div><h3 class="modal-title">📋 Publicar Nova Vaga</h3><p class="modal-subtitle">Preencha os detalhes da oportunidade</p></div>
+      <button class="modal-close" onclick="document.getElementById('modalNovaVaga').classList.remove('open')">✕</button>
+    </div>
+    <div class="form-row form-row-2">
+      <div class="form-group" style="grid-column:1/-1"><label class="form-label">Título da vaga *</label><input class="form-control" id="nvTitulo" placeholder="Ex: Designer UI/UX Sênior"></div>
+    </div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Categoria *</label>
+        <select class="form-control" id="nvCat">
+          <option>Design</option><option>Desenvolvimento</option><option>Marketing</option>
+          <option>Redação</option><option>Fotografia</option><option>Vídeo</option><option>Consultoria</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Modalidade</label>
+        <select class="form-control" id="nvModalidade"><option>Remoto</option><option>Presencial</option><option>Híbrido</option></select>
+      </div>
+    </div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Cidade</label><input class="form-control" id="nvCidade" placeholder="São Paulo"></div>
+      <div class="form-group"><label class="form-label">Estado</label>
+        <select class="form-control" id="nvEstado">
+          <option value="">Nacional</option>
+          <option>SP</option><option>RJ</option><option>MG</option><option>RS</option><option>PR</option><option>SC</option><option>BA</option><option>CE</option><option>GO</option><option>DF</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row form-row-2">
+      <div class="form-group"><label class="form-label">Valor (R$) *</label><input class="form-control" id="nvPreco" type="number" placeholder="120"></div>
+      <div class="form-group"><label class="form-label">Tipo de cobrança</label>
+        <select class="form-control" id="nvTipo"><option value="hora">Por hora</option><option value="projeto">Por projeto</option><option value="dia">Por dia</option></select>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Descrição completa *</label><textarea class="form-control" id="nvDesc" rows="4" placeholder="Descreva as responsabilidades, requisitos e o que o freelancer fará..."></textarea></div>
+    <div class="form-group"><label class="form-label">Habilidades requeridas (separadas por vírgula)</label><input class="form-control" id="nvTags" placeholder="React, Figma, UX, Photoshop"></div>
+    <div class="form-group"><label class="filter-check" style="font-size:0.85rem"><input type="checkbox" id="nvDestaque" style="accent-color:var(--purple)"> Marcar como vaga em destaque</label></div>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+      <button class="btn btn-primary btn-lg" onclick="publicarVaga()">Publicar vaga ✅</button>
+      <button class="btn btn-ghost btn-lg" onclick="document.getElementById('modalNovaVaga').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL AVALIAR FREELANCER -->
+<div class="modal-backdrop" id="modalAvaliar">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div><h3 class="modal-title">⭐ Avaliar Freelancer</h3><p class="modal-subtitle" id="avalTarget">-</p></div>
+      <button class="modal-close" onclick="document.getElementById('modalAvaliar').classList.remove('open')">✕</button>
+    </div>
+    <input type="hidden" id="avalFreelancerId">
+    <input type="hidden" id="avalVagaId">
+    <div class="form-group">
+      <label class="form-label">Nota geral</label>
+      <div class="star-input" id="starInput">
+        <span onclick="setStars(1)">★</span><span onclick="setStars(2)">★</span>
+        <span onclick="setStars(3)">★</span><span onclick="setStars(4)">★</span><span onclick="setStars(5)">★</span>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Comentário</label><textarea class="form-control" id="avalComentario" rows="4" placeholder="Descreva a experiência com este freelancer: qualidade, prazo, comunicação..."></textarea></div>
+    <button class="btn btn-primary btn-full btn-lg" onclick="enviarAvaliacao()">Enviar avaliação ⭐</button>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+document.getElementById('modalsContainer').innerHTML = buildAuthModal();
+
+let currentUser = null;
+let selectedStars = 0;
+
+function setStars(n) {
+  selectedStars = n;
+  document.querySelectorAll('#starInput span').forEach((s,i) => s.classList.toggle('active', i < n));
+}
+
+function checkAuth() {
+  currentUser = SITF.getUser();
+  if (!currentUser || currentUser.tipo !== 'empregador') {
+    document.getElementById('pageContent').innerHTML = `
+      <div class="empty-state" style="padding:5rem 2rem">
+        <div class="empty-state-icon">🔒</div>
+        <h3>Área restrita a empregadores</h3>
+        <p style="margin:0.75rem 0 1.5rem">Faça login ou crie uma conta como empregador para acessar este painel.</p>
+        <div style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-primary btn-lg" onclick="openModal('login')">Entrar</button>
+          <button class="btn btn-outline btn-lg" onclick="openModal('register')">Criar conta</button>
+        </div>
+      </div>`;
+    return false;
+  }
+  const el = document.getElementById('spAvatar');
+  if (el) el.innerHTML = avatarHTML(currentUser.nome, 'md');
+  const sn = document.getElementById('spName');
+  if (sn) sn.textContent = currentUser.nome;
+  // Update nav
+  const na = document.getElementById('navUserArea');
+  if (na) na.innerHTML = `<span style="font-size:0.82rem;color:var(--text-muted)">${currentUser.nome}</span><button class="btn btn-danger btn-sm" onclick="logout()">Sair</button>`;
+  return true;
+}
+
+function logout() {
+  localStorage.removeItem('sitf_user');
+  window.location.href = 'index.html';
+}
+
+function showPage(page) {
+  document.querySelectorAll('.dash-nav-item').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('nav-'+page);
+  if (btn) btn.classList.add('active');
+  const pages = { dashboard: pageDashboard, perfil: pagePerfil, vagas: pageVagas, candidatos: pageCandidatos, chat: pageChat, avaliar: pageAvaliar, 'minhas-avals': pageMinhasAvals };
+  if (pages[page]) pages[page]();
+}
+
+function pageDashboard() {
+  if (!checkAuth()) return;
+  const allVagas = SITF.getVagas().filter(v => v.empregadorId === currentUser.id);
+  const cands = SITF.getCandidaturas();
+  const myVagaIds = allVagas.map(v => v.id);
+  const totalCands = cands.filter(c => myVagaIds.includes(c.vagaId)).length;
+  const avals = SITF.getAvaliacoes().filter(a => a.avaliadoId === currentUser.id);
+  const avgRating = avals.length ? (avals.reduce((s,a)=>s+a.nota,0)/avals.length).toFixed(1) : '–';
+
+  document.getElementById('pageContent').innerHTML = `
+    <div style="margin-bottom:1.75rem"><h2 style="font-size:1.5rem;font-weight:800">Olá, ${currentUser.nome}! 👋</h2><p style="color:var(--text-muted);font-size:0.9rem">Bem-vindo ao seu painel de empregador.</p></div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-value">${allVagas.length}</div><div class="stat-label">Vagas publicadas</div></div>
+      <div class="stat-card"><div class="stat-value">${allVagas.filter(v=>v.status==='aberta').length}</div><div class="stat-label">Vagas abertas</div></div>
+      <div class="stat-card"><div class="stat-value">${totalCands}</div><div class="stat-label">Candidaturas recebidas</div></div>
+      <div class="stat-card"><div class="stat-value">${avgRating} ⭐</div><div class="stat-label">Sua avaliação média</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem">
+      <div class="card" style="padding:1.5rem">
+        <h3 style="font-size:1rem;font-weight:700;margin-bottom:1rem">Vagas recentes</h3>
+        ${allVagas.length ? allVagas.slice(0,3).map(v=>`<div style="padding:0.85rem;background:var(--dark3);border-radius:var(--radius-sm);margin-bottom:0.6rem;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:0.875rem;font-weight:600">${v.title}</div><div style="font-size:0.72rem;color:var(--text-muted)">${v.candidatos.length} candidato${v.candidatos.length!==1?'s':''}</div></div><span class="badge badge-open">Aberta</span></div>`).join('') : '<p style="color:var(--text-muted);font-size:0.85rem">Nenhuma vaga publicada ainda.</p>'}
+        <button class="btn btn-primary btn-full btn-sm" style="margin-top:0.75rem" onclick="document.getElementById('modalNovaVaga').classList.add('open')">+ Publicar nova vaga</button>
+      </div>
+      <div class="card" style="padding:1.5rem">
+        <h3 style="font-size:1rem;font-weight:700;margin-bottom:1rem">Ações rápidas</h3>
+        <div style="display:flex;flex-direction:column;gap:0.6rem">
+          <button class="btn btn-primary btn-full" onclick="document.getElementById('modalNovaVaga').classList.add('open')">📋 Publicar vaga</button>
+          <button class="btn btn-secondary btn-full" onclick="showPage('candidatos')">👥 Ver candidatos</button>
+          <button class="btn btn-secondary btn-full" onclick="showPage('chat')">💬 Abrir chat</button>
+          <button class="btn btn-secondary btn-full" onclick="showPage('avaliar')">⭐ Avaliar freelancers</button>
+          <a href="freelancers.html" class="btn btn-outline btn-full">🔍 Buscar talentos</a>
+        </div>
+      </div>
+    </div>`;
+}
+
+function pagePerfil() {
+  if (!checkAuth()) return;
+  document.getElementById('pageContent').innerHTML = `
+    <div style="margin-bottom:1.75rem"><h2 style="font-size:1.5rem;font-weight:800">🏢 Meu Perfil</h2><p style="color:var(--text-muted);font-size:0.9rem">Configure as informações da sua empresa</p></div>
+    <div class="card" style="padding:2rem;max-width:640px">
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:2rem">
+        <div id="profAvatar">${avatarHTML(currentUser.nome,'xl')}</div>
+        <div><div style="font-size:1.2rem;font-weight:800">${currentUser.nome}</div><div style="font-size:0.82rem;color:var(--purple-light)">Conta Empregador</div></div>
+      </div>
+      <div class="form-group"><label class="form-label">Nome da empresa / projeto *</label><input class="form-control" id="pNome" value="${currentUser.nome}"></div>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Cidade</label><input class="form-control" id="pCidade" value="${currentUser.cidade||''}"></div>
+        <div class="form-group"><label class="form-label">Estado</label>
+          <select class="form-control" id="pEstado">
+            <option value="">Selecione</option>
+            <option>SP</option><option>RJ</option><option>MG</option><option>RS</option><option>PR</option><option>SC</option><option>BA</option><option>CE</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Site / LinkedIn</label><input class="form-control" id="pSite" value="${currentUser.site||''}" placeholder="empresa.com.br"></div>
+      <div class="form-group"><label class="form-label">Sobre a empresa</label><textarea class="form-control" id="pBio" rows="4" placeholder="Descreva o que a empresa faz, sua missão e o tipo de talento que busca...">${currentUser.bio||''}</textarea></div>
+      <div class="form-group"><label class="form-label">E-mail de contato</label><input class="form-control" type="email" value="${currentUser.email}" disabled></div>
+      <button class="btn btn-primary btn-lg" onclick="salvarPerfil()">Salvar alterações ✅</button>
+    </div>`;
+  // Set estado
+  const sel = document.getElementById('pEstado');
+  if (sel && currentUser.estado) sel.value = currentUser.estado;
+}
+
+function salvarPerfil() {
+  const users = SITF.getUsers();
+  const idx = users.findIndex(u => u.id === currentUser.id);
+  const updated = { ...currentUser,
+    nome: document.getElementById('pNome').value,
+    cidade: document.getElementById('pCidade').value,
+    estado: document.getElementById('pEstado').value,
+    site: document.getElementById('pSite').value,
+    bio: document.getElementById('pBio').value,
+  };
+  if (idx >= 0) users[idx] = updated;
+  SITF.setUsers(users);
+  SITF.setUser(updated);
+  currentUser = updated;
+  document.getElementById('spName').textContent = updated.nome;
+  showToast('Perfil atualizado com sucesso! ✅', 'success');
+}
+
+function pageVagas() {
+  if (!checkAuth()) return;
+  const vagas = SITF.getVagas().filter(v => v.empregadorId === currentUser.id);
+  document.getElementById('pageContent').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.75rem;flex-wrap:wrap;gap:1rem">
+      <div><h2 style="font-size:1.5rem;font-weight:800">📋 Minhas Vagas</h2><p style="color:var(--text-muted);font-size:0.9rem">${vagas.length} vaga${vagas.length!==1?'s':''} publicada${vagas.length!==1?'s':''}</p></div>
+      <button class="btn btn-primary" onclick="document.getElementById('modalNovaVaga').classList.add('open')">+ Nova vaga</button>
+    </div>
+    ${vagas.length ? vagas.map(v => `
+      <div class="card vaga-manage-card" style="margin-bottom:1rem">
+        <div class="company-logo" style="background:${avatarColor(v.empresa)};width:44px;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;flex-shrink:0">${initials(v.empresa)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:0.95rem;font-weight:700;margin-bottom:0.2rem">${v.title}</div>
+          <div style="font-size:0.78rem;color:var(--text-muted)">📍 ${v.cidade}${v.estado?', '+v.estado:''} · ${v.cat} · R$ ${v.preco}/${v.tipo}</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.2rem">${v.candidatos.length} candidato${v.candidatos.length!==1?'s':''} · publicada ${timeAgo(v.criado)}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end">
+          <span class="badge badge-open">${v.status}</span>
+          <button class="btn btn-secondary btn-sm" onclick="showPage('candidatos')">Ver candidatos</button>
+          <button class="btn btn-danger btn-sm" onclick="encerrarVaga('${v.id}')">Encerrar</button>
+        </div>
+      </div>`).join('') : '<div class="empty-state"><div class="empty-state-icon">📋</div><h3>Nenhuma vaga publicada</h3><p>Publique sua primeira vaga e encontre o freelancer ideal!</p><button class="btn btn-primary" style="margin-top:1rem" onclick="document.getElementById('modalNovaVaga').classList.add('open')">+ Publicar vaga</button></div>'}`;
+}
+
+function encerrarVaga(id) {
+  const vagas = SITF.getVagas();
+  const v = vagas.find(x => x.id === id);
+  if (v) { v.status = 'encerrada'; SITF.setVagas(vagas); showToast('Vaga encerrada.', 'info'); pageVagas(); }
+}
+
+function pageCandidatos() {
+  if (!checkAuth()) return;
+  const myVagas = SITF.getVagas().filter(v => v.empregadorId === currentUser.id);
+  const myVagaIds = myVagas.map(v => v.id);
+  const cands = SITF.getCandidaturas().filter(c => myVagaIds.includes(c.vagaId));
+  const users = SITF.getUsers();
+  document.getElementById('pageContent').innerHTML = `
+    <div style="margin-bottom:1.75rem"><h2 style="font-size:1.5rem;font-weight:800">👥 Candidatos</h2><p style="color:var(--text-muted);font-size:0.9rem">${cands.length} candidatura${cands.length!==1?'s':''} recebida${cands.length!==1?'s':''}</p></div>
+    ${cands.length ? cands.map(c => {
+      const f = users.find(u => u.id === c.freelancerId);
+        if (!f) return '';
+        const profileLink = `<a href="perfil.html?id=${f.id}" target="_blank" class="btn btn-ghost btn-sm" title="Ver perfil público">👤</a>`;
+      const v = myVagas.find(x => x.id === c.vagaId);
+      if (!f || !v) return '';
+      return `<div class="card cand-card">
+        ${avatarHTML(f.nome,'md')}
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:0.9rem">${f.nome}</div>
+          <div style="font-size:0.75rem;color:var(--text-muted)">${f.bio?f.bio.substring(0,60)+'...':''} · Vaga: ${v.title}</div>
+          <div style="font-size:0.72rem;color:var(--text-dim)">${timeAgo(c.criado)}</div>
+        </div>
+        <span class="badge ${c.status==='aprovado'?'badge-remote':c.status==='reprovado'?'badge-urgent':'badge-new'}">${c.status}</span>
+        <div class="cand-actions">
+          <button class="btn btn-success btn-sm" onclick="atualizarCand('${c.id}','aprovado')">✓ Aprovar</button>
+          <button class="btn btn-danger btn-sm" onclick="atualizarCand('${c.id}','reprovado')">✕</button>
+          <button class="btn btn-ghost btn-sm" onclick="chatWithFreela('${f.id}','${f.nome}')">💬</button>
+          <button class="btn btn-outline btn-sm" onclick="abrirAvaliar('${f.id}','${f.nome}','${v.id}')">⭐</button>
+        </div>
+      </div>`;
+    }).join('') : '<div class="empty-state"><div class="empty-state-icon">👥</div><h3>Nenhuma candidatura ainda</h3><p>Publique vagas para receber candidatos.</p></div>'}`;
+}
+
+function atualizarCand(id, status) {
+  const cands = SITF.getCandidaturas();
+  const c = cands.find(x => x.id === id);
+  if (c) { c.status = status; SITF.setCandidaturas(cands); showToast(status==='aprovado'?'Candidato aprovado! ✅':'Candidato reprovado.','info'); pageCandidatos(); }
+}
+
+let activeChatUser = null;
+
+function pageChat() {
+  if (!checkAuth()) return;
+  const users = SITF.getUsers().filter(u => u.tipo === 'freelancer');
+  const myVagas = SITF.getVagas().filter(v => v.empregadorId === currentUser.id);
+  const myVagaIds = myVagas.map(v => v.id);
+  const cands = SITF.getCandidaturas().filter(c => myVagaIds.includes(c.vagaId));
+  const chatUserIds = [...new Set(cands.map(c => c.freelancerId))];
+  const chatUsers = users.filter(u => chatUserIds.includes(u.id));
+  const allMsgs = SITF.getMsgs();
+
+  if (!activeChatUser && chatUsers.length) activeChatUser = chatUsers[0];
+
+  document.getElementById('pageContent').innerHTML = `
+    <div style="margin-bottom:1.25rem"><h2 style="font-size:1.5rem;font-weight:800">💬 Chat</h2></div>
+    <div class="chat-wrap">
+      <div class="chat-layout">
+        <div class="chat-sidebar">
+          <div class="chat-sidebar-header">Conversas <span style="font-size:0.72rem;background:var(--purple);color:#fff;padding:0.1rem 0.5rem;border-radius:99px">${chatUsers.length}</span></div>
+          <div class="chat-contacts" id="chatContacts">
+            ${chatUsers.length ? chatUsers.map(u => `
+              <div class="contact-item ${activeChatUser&&activeChatUser.id===u.id?'active':''}" onclick="selectChatUser('${u.id}')">
+                ${avatarHTML(u.nome,'sm')}
+                <div class="contact-info">
+                  <div class="contact-name">${u.nome}</div>
+                  <div class="contact-preview">${u.bio?u.bio.substring(0,30)+'...':'Freelancer'}</div>
+                </div>
+                ${u.online?'<div style="width:8px;height:8px;background:var(--green);border-radius:50%;flex-shrink:0"></div>':''}
+              </div>`).join('') : '<div style="padding:1.5rem;text-align:center;font-size:0.82rem;color:var(--text-muted)">Nenhum candidato ainda.<br>Publique vagas para receber candidatos.</div>'}
+          </div>
+        </div>
+        <div class="chat-main" id="chatMain">
+          ${activeChatUser ? renderChatMain(activeChatUser, allMsgs) : '<div class="empty-state" style="margin:auto"><div class="empty-state-icon">💬</div><h3>Selecione uma conversa</h3></div>'}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderChatMain(peer, allMsgs) {
+  const chatKey = [currentUser.id, peer.id].sort().join('_');
+  const msgs = allMsgs[chatKey] || [];
+  const now = new Date();
+  const timeStr = now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
+  return `
+    <div class="chat-header">
+      <div class="online-indicator">${avatarHTML(peer.nome,'sm')}${peer.online?'<div class="online-dot"></div>':''}</div>
+      <div class="chat-header-info">
+        <div class="chat-peer-name">${peer.nome}</div>
+        <div class="chat-peer-status">${peer.online?'● Online agora':'Offline'}</div>
+      </div>
+    </div>
+    <div class="chat-messages" id="chatMsgs">
+      ${msgs.length ? msgs.map(m => `
+        <div class="message ${m.senderId===currentUser.id?'outgoing':''}">
+          ${m.senderId!==currentUser.id?avatarHTML(peer.nome,'sm'):''}
+          <div><div class="msg-bubble">${m.text}</div><div class="msg-time">${timeAgo(m.ts)}</div></div>
+          ${m.senderId===currentUser.id?avatarHTML(currentUser.nome,'sm'):''}
+        </div>`).join('') : '<div style="text-align:center;padding:2rem;font-size:0.82rem;color:var(--text-muted)">Início da conversa com ${peer.nome}</div>'}
+    </div>
+    <div class="chat-composer">
+      <input class="composer-input" id="msgInputField" placeholder="Digite sua mensagem..." onkeydown="if(event.key==='Enter')sendMsg()">
+      <button class="send-btn" onclick="sendMsg()">➤</button>
+    </div>`;
+}
+
+function selectChatUser(id) {
+  const users = SITF.getUsers();
+  activeChatUser = users.find(u => u.id === id);
+  pageChat();
+}
+
+function chatWithFreela(id, nome) {
+  const users = SITF.getUsers();
+  activeChatUser = users.find(u => u.id === id);
+  showPage('chat');
+}
+
+function sendMsg() {
+  const input = document.getElementById('msgInputField');
+  if (!input || !input.value.trim() || !activeChatUser) return;
+  sendChatMsg([currentUser.id, activeChatUser.id].sort().join('_'), input.value.trim(), currentUser.id);
+  input.value = '';
+  // Auto reply
+  setTimeout(() => {
+    const replies = ['Entendido! Vou analisar sua proposta.','Perfeito, obrigado!','Posso te chamar para uma call?','Ótimo, aguardo mais detalhes.'];
+    sendChatMsg([currentUser.id, activeChatUser.id].sort().join('_'), replies[Math.floor(Math.random()*replies.length)], activeChatUser.id);
+    pageChat();
+  }, 1500);
+  pageChat();
+}
+
+function pageAvaliar() {
+  if (!checkAuth()) return;
+  const myVagas = SITF.getVagas().filter(v => v.empregadorId === currentUser.id);
+  const myVagaIds = myVagas.map(v => v.id);
+  const cands = SITF.getCandidaturas().filter(c => myVagaIds.includes(c.vagaId) && c.status === 'aprovado');
+  const users = SITF.getUsers();
+  const avals = SITF.getAvaliacoes();
+  document.getElementById('pageContent').innerHTML = `
+    <div style="margin-bottom:1.75rem"><h2 style="font-size:1.5rem;font-weight:800">⭐ Avaliar Freelancers</h2><p style="color:var(--text-muted);font-size:0.9rem">Avalie os freelancers com quem você trabalhou</p></div>
+    ${cands.length ? cands.map(c => {
+      const f = users.find(u => u.id === c.freelancerId);
+      const v = myVagas.find(x => x.id === c.vagaId);
+      if (!f || !v) return '';
+      const jaAvaliou = avals.find(a => a.avaliadorId===currentUser.id && a.avaliadoId===f.id && a.vagaId===v.id);
+      return `<div class="rating-form">
+        <div style="display:flex;align-items:center;gap:0.85rem;margin-bottom:0.85rem">
+          ${avatarHTML(f.nome,'md')}
+          <div><div style="font-weight:600">${f.nome}</div><div style="font-size:0.75rem;color:var(--text-muted)">Vaga: ${v.title}</div></div>
+          ${jaAvaliou?`<span class="badge badge-remote" style="margin-left:auto">Avaliado ✓</span>`:`<button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="abrirAvaliar('${f.id}','${f.nome}','${v.id}')">⭐ Avaliar</button>`}
+        </div>
+        ${jaAvaliou?`<div style="font-size:0.82rem;color:var(--text-muted);font-style:italic">"${jaAvaliou.comentario}" · ${starsHTML(jaAvaliou.nota)}</div>`:''}
+      </div>`;
+    }).join('') : '<div class="empty-state"><div class="empty-state-icon">⭐</div><h3>Nenhum freelancer para avaliar</h3><p>Aprove candidatos para depois avaliá-los.</p></div>'}`;
+}
+
+function abrirAvaliar(fId, fNome, vagaId) {
+  document.getElementById('avalFreelancerId').value = fId;
+  document.getElementById('avalVagaId').value = vagaId;
+  document.getElementById('avalTarget').textContent = fNome;
+  selectedStars = 0;
+  document.querySelectorAll('#starInput span').forEach(s => s.classList.remove('active'));
+  document.getElementById('avalComentario').value = '';
+  document.getElementById('modalAvaliar').classList.add('open');
+}
+
+function enviarAvaliacao() {
+  if (!selectedStars) { showToast('Selecione uma nota (estrelas).', 'warn'); return; }
+  const fId = document.getElementById('avalFreelancerId').value;
+  const vagaId = document.getElementById('avalVagaId').value;
+  const comentario = document.getElementById('avalComentario').value.trim();
+  if (!comentario) { showToast('Escreva um comentário.', 'warn'); return; }
+  const avals = SITF.getAvaliacoes();
+  avals.push({ id: 'a'+Date.now(), vagaId, avaliadorId: currentUser.id, avaliadoId: fId, tipo: 'empregador_avalia_freelancer', nota: selectedStars, comentario, criado: Date.now() });
+  SITF.setAvaliacoes(avals);
+  document.getElementById('modalAvaliar').classList.remove('open');
+  showToast('Avaliação enviada com sucesso! ⭐', 'success');
+  pageAvaliar();
+}
+
+function pageMinhasAvals() {
+  if (!checkAuth()) return;
+  const avals = SITF.getAvaliacoes().filter(a => a.avaliadoId === currentUser.id && a.tipo === 'freelancer_avalia_empregador');
+  const users = SITF.getUsers();
+  const avgRating = avals.length ? (avals.reduce((s,a)=>s+a.nota,0)/avals.length).toFixed(1) : '–';
+  document.getElementById('pageContent').innerHTML = `
+    <div style="margin-bottom:1.75rem">
+      <h2 style="font-size:1.5rem;font-weight:800">📝 Avaliações Recebidas</h2>
+      <p style="color:var(--text-muted);font-size:0.9rem">Média: <strong style="color:var(--amber)">${avgRating} ⭐</strong> · ${avals.length} avaliação${avals.length!==1?'ões':''}</p>
+    </div>
+    ${avals.length ? avals.map(a => {
+      const f = users.find(u => u.id === a.avaliadorId);
+      return `<div class="card" style="padding:1.25rem;margin-bottom:0.85rem">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem">
+          ${f?avatarHTML(f.nome,'sm'):''}
+          <div><div style="font-weight:600;font-size:0.875rem">${f?f.nome:'Freelancer'}</div>
+          <div style="font-size:0.72rem;color:var(--text-dim)">${timeAgo(a.criado)}</div></div>
+          <div style="margin-left:auto;color:var(--amber);font-size:0.88rem">${starsHTML(a.nota)}</div>
+        </div>
+        <p style="font-size:0.85rem;color:var(--text-muted);font-style:italic">"${a.comentario}"</p>
+      </div>`;
+    }).join('') : '<div class="empty-state"><div class="empty-state-icon">📝</div><h3>Nenhuma avaliação recebida ainda</h3><p>Os freelancers poderão avaliar sua empresa após os serviços.</p></div>'}`;
+}
+
+function publicarVaga() {
+  if (!checkAuth()) return;
+  const titulo = document.getElementById('nvTitulo').value.trim();
+  const preco = parseFloat(document.getElementById('nvPreco').value);
+  const desc = document.getElementById('nvDesc').value.trim();
+  if (!titulo || !preco || !desc) { showToast('Preencha os campos obrigatórios (*).', 'error'); return; }
+  const vagas = SITF.getVagas();
+  const tags = document.getElementById('nvTags').value.split(',').map(t=>t.trim()).filter(Boolean);
+  const nova = {
+    id: 'v'+Date.now(),
+    title: titulo,
+    empresa: currentUser.nome,
+    empregadorId: currentUser.id,
+    cat: document.getElementById('nvCat').value,
+    preco, tipo: document.getElementById('nvTipo').value,
+    modalidade: document.getElementById('nvModalidade').value,
+    cidade: document.getElementById('nvCidade').value || 'Nacional',
+    estado: document.getElementById('nvEstado').value,
+    desc, tags,
+    status: 'aberta',
+    destaque: document.getElementById('nvDestaque').checked,
+    criado: Date.now(),
+    candidatos: [],
+  };
+  vagas.push(nova);
+  SITF.setVagas(vagas);
+  document.getElementById('modalNovaVaga').classList.remove('open');
+  showToast('Vaga publicada com sucesso! 🎉', 'success');
+  showPage('vagas');
+}
+
+// Init
+checkAuth();
+showPage('dashboard');
+
+// Handle hash
+if (window.location.hash === '#chat') showPage('chat');
+if (window.location.hash === '#vagas') showPage('vagas');
+</script>
+</body></html>
