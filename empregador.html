@@ -153,20 +153,29 @@ document.getElementById('modalsContainer').innerHTML = buildAuthModal();
 
 let currentUser = null;
 let selectedStars = 0;
+let activeChatUser = null;
 
 function setStars(n) {
   selectedStars = n;
-  document.querySelectorAll('#starInput span').forEach((s,i) => s.classList.toggle('active', i < n));
+  document.querySelectorAll('#starInput span').forEach((s, i) => s.classList.toggle('active', i < n));
 }
 
-function checkAuth() {
+function updateNavUser() {
+  const na = document.getElementById('navUserArea');
+  if (!na || !currentUser) return;
+  na.innerHTML = `
+    <span style="font-size:0.82rem;color:var(--text-muted)">${currentUser.nome}</span>
+    <button class="btn btn-danger btn-sm" onclick="logout()">Sair</button>`;
+}
+
+async function checkAuth() {
   currentUser = SITF.getUser();
   if (!currentUser || currentUser.tipo !== 'empregador') {
     document.getElementById('pageContent').innerHTML = `
       <div class="empty-state" style="padding:5rem 2rem">
         <div class="empty-state-icon">🔒</div>
         <h3>Área restrita a empregadores</h3>
-        <p style="margin:0.75rem 0 1.5rem">Faça login ou crie uma conta como empregador para acessar este painel.</p>
+        <p style="margin:0.75rem 0 1.5rem">Faça login ou crie uma conta como empregador.</p>
         <div style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap">
           <button class="btn btn-primary btn-lg" onclick="openModal('login')">Entrar</button>
           <button class="btn btn-outline btn-lg" onclick="openModal('register')">Criar conta</button>
@@ -174,56 +183,86 @@ function checkAuth() {
       </div>`;
     return false;
   }
-  const el = document.getElementById('spAvatar');
-  if (el) el.innerHTML = avatarHTML(currentUser.nome, 'md');
-  const sn = document.getElementById('spName');
-  if (sn) sn.textContent = currentUser.nome;
-  // Update nav
-  const na = document.getElementById('navUserArea');
-  if (na) na.innerHTML = `<span style="font-size:0.82rem;color:var(--text-muted)">${currentUser.nome}</span><button class="btn btn-danger btn-sm" onclick="logout()">Sair</button>`;
+  document.getElementById('spAvatar').innerHTML = avatarHTML(currentUser.nome, 'md');
+  document.getElementById('spName').textContent = currentUser.nome;
+  updateNavUser();
   return true;
 }
 
 function logout() {
-  localStorage.removeItem('sitf_user');
+  SITF.clearUser();
   window.location.href = 'index.html';
 }
 
 function showPage(page) {
   document.querySelectorAll('.dash-nav-item').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById('nav-'+page);
+  const btn = document.getElementById('nav-' + page);
   if (btn) btn.classList.add('active');
-  const pages = { dashboard: pageDashboard, perfil: pagePerfil, vagas: pageVagas, candidatos: pageCandidatos, chat: pageChat, avaliar: pageAvaliar, 'minhas-avals': pageMinhasAvals };
+  const pages = {
+    dashboard:      pageDashboard,
+    perfil:         pagePerfil,
+    vagas:          pageVagas,
+    candidatos:     pageCandidatos,
+    chat:           pageChat,
+    avaliar:        pageAvaliar,
+    'minhas-avals': pageMinhasAvals
+  };
   if (pages[page]) pages[page]();
 }
 
-function pageDashboard() {
-  if (!checkAuth()) return;
-  const allVagas = SITF.getVagas().filter(v => v.empregadorId === currentUser.id);
-  const cands = SITF.getCandidaturas();
-  const myVagaIds = allVagas.map(v => v.id);
-  const totalCands = cands.filter(c => myVagaIds.includes(c.vagaId)).length;
-  const avals = SITF.getAvaliacoes().filter(a => a.avaliadoId === currentUser.id);
-  const avgRating = avals.length ? (avals.reduce((s,a)=>s+a.nota,0)/avals.length).toFixed(1) : '–';
+/* ── DASHBOARD ──────────────────────────────────── */
+async function pageDashboard() {
+  if (!await checkAuth()) return;
+
+  const [minhasVagas, avals] = await Promise.all([
+    SITF.getVagas(),
+    SITF.getAvaliacoes({ avaliado_id: currentUser.id, tipo: 'freelancer_avalia_empregador' })
+  ]);
+
+  const vagas = minhasVagas.filter(v => v.empregador_id === currentUser.id);
+
+  // Busca candidaturas de todas as vagas
+  let totalCands = 0;
+  for (const v of vagas) {
+    const c = await SITF.getCandidaturas({ vaga_id: v.id });
+    totalCands += Array.isArray(c) ? c.length : 0;
+  }
+
+  const avg = avals.length
+    ? (avals.reduce((s,a) => s + parseInt(a.nota), 0) / avals.length).toFixed(1)
+    : '–';
 
   document.getElementById('pageContent').innerHTML = `
-    <div style="margin-bottom:1.75rem"><h2 style="font-size:1.5rem;font-weight:800">Olá, ${currentUser.nome}! 👋</h2><p style="color:var(--text-muted);font-size:0.9rem">Bem-vindo ao seu painel de empregador.</p></div>
+    <div style="margin-bottom:1.75rem">
+      <h2 style="font-size:1.5rem;font-weight:800">Olá, ${currentUser.nome}! 👋</h2>
+      <p style="color:var(--text-muted);font-size:0.9rem">Bem-vindo ao seu painel de empregador.</p>
+    </div>
     <div class="stat-row">
-      <div class="stat-card"><div class="stat-value">${allVagas.length}</div><div class="stat-label">Vagas publicadas</div></div>
-      <div class="stat-card"><div class="stat-value">${allVagas.filter(v=>v.status==='aberta').length}</div><div class="stat-label">Vagas abertas</div></div>
+      <div class="stat-card"><div class="stat-value">${vagas.length}</div><div class="stat-label">Vagas publicadas</div></div>
+      <div class="stat-card"><div class="stat-value">${vagas.filter(v=>v.status==='aberta').length}</div><div class="stat-label">Vagas abertas</div></div>
       <div class="stat-card"><div class="stat-value">${totalCands}</div><div class="stat-label">Candidaturas recebidas</div></div>
-      <div class="stat-card"><div class="stat-value">${avgRating} ⭐</div><div class="stat-label">Sua avaliação média</div></div>
+      <div class="stat-card"><div class="stat-value">${avg} ⭐</div><div class="stat-label">Sua avaliação média</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem">
       <div class="card" style="padding:1.5rem">
         <h3 style="font-size:1rem;font-weight:700;margin-bottom:1rem">Vagas recentes</h3>
-        ${allVagas.length ? allVagas.slice(0,3).map(v=>`<div style="padding:0.85rem;background:var(--dark3);border-radius:var(--radius-sm);margin-bottom:0.6rem;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:0.875rem;font-weight:600">${v.title}</div><div style="font-size:0.72rem;color:var(--text-muted)">${v.candidatos.length} candidato${v.candidatos.length!==1?'s':''}</div></div><span class="badge badge-open">Aberta</span></div>`).join('') : '<p style="color:var(--text-muted);font-size:0.85rem">Nenhuma vaga publicada ainda.</p>'}
-        <button class="btn btn-primary btn-full btn-sm" style="margin-top:0.75rem" onclick="document.getElementById('modalNovaVaga').classList.add('open')">+ Publicar nova vaga</button>
+        ${vagas.length ? vagas.slice(0,3).map(v => `
+          <div style="padding:0.85rem;background:var(--dark3);border-radius:var(--radius-sm);margin-bottom:0.6rem;display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-size:0.875rem;font-weight:600">${v.titulo}</div>
+              <div style="font-size:0.72rem;color:var(--text-muted)">${v.candidatos ? v.candidatos.length : 0} candidatos</div>
+            </div>
+            <span class="badge ${v.status==='aberta'?'badge-open':'badge-closed'}">${v.status}</span>
+          </div>`).join('') :
+          '<p style="font-size:0.85rem;color:var(--text-muted)">Nenhuma vaga publicada ainda.</p>'}
+        <button class="btn btn-primary btn-full btn-sm" style="margin-top:0.75rem"
+          onclick="document.getElementById('modalNovaVaga').classList.add('open')">+ Publicar nova vaga</button>
       </div>
       <div class="card" style="padding:1.5rem">
         <h3 style="font-size:1rem;font-weight:700;margin-bottom:1rem">Ações rápidas</h3>
         <div style="display:flex;flex-direction:column;gap:0.6rem">
-          <button class="btn btn-primary btn-full" onclick="document.getElementById('modalNovaVaga').classList.add('open')">📋 Publicar vaga</button>
+          <button class="btn btn-primary btn-full"
+            onclick="document.getElementById('modalNovaVaga').classList.add('open')">📋 Publicar vaga</button>
           <button class="btn btn-secondary btn-full" onclick="showPage('candidatos')">👥 Ver candidatos</button>
           <button class="btn btn-secondary btn-full" onclick="showPage('chat')">💬 Abrir chat</button>
           <button class="btn btn-secondary btn-full" onclick="showPage('avaliar')">⭐ Avaliar freelancers</button>
@@ -233,133 +272,204 @@ function pageDashboard() {
     </div>`;
 }
 
-function pagePerfil() {
-  if (!checkAuth()) return;
+/* ── PERFIL ─────────────────────────────────────── */
+async function pagePerfil() {
+  if (!await checkAuth()) return;
   document.getElementById('pageContent').innerHTML = `
-    <div style="margin-bottom:1.75rem"><h2 style="font-size:1.5rem;font-weight:800">🏢 Meu Perfil</h2><p style="color:var(--text-muted);font-size:0.9rem">Configure as informações da sua empresa</p></div>
+    <div style="margin-bottom:1.75rem">
+      <h2 style="font-size:1.5rem;font-weight:800">🏢 Meu Perfil</h2>
+      <p style="color:var(--text-muted);font-size:0.9rem">Configure as informações da sua empresa</p>
+    </div>
     <div class="card" style="padding:2rem;max-width:640px">
       <div style="display:flex;align-items:center;gap:1rem;margin-bottom:2rem">
-        <div id="profAvatar">${avatarHTML(currentUser.nome,'xl')}</div>
-        <div><div style="font-size:1.2rem;font-weight:800">${currentUser.nome}</div><div style="font-size:0.82rem;color:var(--purple-light)">Conta Empregador</div></div>
+        <div>${avatarHTML(currentUser.nome,'xl')}</div>
+        <div>
+          <div style="font-size:1.2rem;font-weight:800">${currentUser.nome}</div>
+          <div style="font-size:0.82rem;color:var(--purple-light)">Conta Empregador</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.25rem">${currentUser.email}</div>
+        </div>
       </div>
-      <div class="form-group"><label class="form-label">Nome da empresa / projeto *</label><input class="form-control" id="pNome" value="${currentUser.nome}"></div>
+      <div class="form-group">
+        <label class="form-label">Nome da empresa / projeto *</label>
+        <input class="form-control" id="pNome" value="${currentUser.nome}">
+      </div>
       <div class="form-row form-row-2">
-        <div class="form-group"><label class="form-label">Cidade</label><input class="form-control" id="pCidade" value="${currentUser.cidade||''}"></div>
-        <div class="form-group"><label class="form-label">Estado</label>
+        <div class="form-group">
+          <label class="form-label">Cidade</label>
+          <input class="form-control" id="pCidade" value="${currentUser.cidade||''}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Estado</label>
           <select class="form-control" id="pEstado">
             <option value="">Selecione</option>
-            <option>SP</option><option>RJ</option><option>MG</option><option>RS</option><option>PR</option><option>SC</option><option>BA</option><option>CE</option>
+            <option>SP</option><option>RJ</option><option>MG</option><option>RS</option>
+            <option>PR</option><option>SC</option><option>BA</option><option>CE</option>
+            <option>GO</option><option>DF</option>
           </select>
         </div>
       </div>
-      <div class="form-group"><label class="form-label">Site / LinkedIn</label><input class="form-control" id="pSite" value="${currentUser.site||''}" placeholder="empresa.com.br"></div>
-      <div class="form-group"><label class="form-label">Sobre a empresa</label><textarea class="form-control" id="pBio" rows="4" placeholder="Descreva o que a empresa faz, sua missão e o tipo de talento que busca...">${currentUser.bio||''}</textarea></div>
-      <div class="form-group"><label class="form-label">E-mail de contato</label><input class="form-control" type="email" value="${currentUser.email}" disabled></div>
+      <div class="form-group">
+        <label class="form-label">Site / LinkedIn</label>
+        <input class="form-control" id="pSite" value="${currentUser.site||''}" placeholder="empresa.com.br">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Sobre a empresa</label>
+        <textarea class="form-control" id="pBio" rows="4">${currentUser.bio||''}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">E-mail de contato</label>
+        <input class="form-control" type="email" value="${currentUser.email}" disabled>
+      </div>
       <button class="btn btn-primary btn-lg" onclick="salvarPerfil()">Salvar alterações ✅</button>
     </div>`;
-  // Set estado
+
   const sel = document.getElementById('pEstado');
   if (sel && currentUser.estado) sel.value = currentUser.estado;
 }
 
-function salvarPerfil() {
-  const users = SITF.getUsers();
-  const idx = users.findIndex(u => u.id === currentUser.id);
-  const updated = { ...currentUser,
-    nome: document.getElementById('pNome').value,
-    cidade: document.getElementById('pCidade').value,
-    estado: document.getElementById('pEstado').value,
-    site: document.getElementById('pSite').value,
-    bio: document.getElementById('pBio').value,
+async function salvarPerfil() {
+  const dados = {
+    id:      currentUser.id,
+    nome:    document.getElementById('pNome').value.trim(),
+    cidade:  document.getElementById('pCidade').value.trim(),
+    estado:  document.getElementById('pEstado').value,
+    site:    document.getElementById('pSite').value.trim(),
+    bio:     document.getElementById('pBio').value.trim(),
+    online:  1,
   };
-  if (idx >= 0) users[idx] = updated;
-  SITF.setUsers(users);
-  SITF.setUser(updated);
-  currentUser = updated;
-  document.getElementById('spName').textContent = updated.nome;
-  showToast('Perfil atualizado com sucesso! ✅', 'success');
+  const res = await SITF.updateUsuario(dados);
+  if (res.sucesso) {
+    const updated = { ...currentUser, ...dados };
+    SITF.setUser(updated);
+    currentUser = updated;
+    document.getElementById('spName').textContent = updated.nome;
+    showToast('Perfil atualizado com sucesso! ✅', 'success');
+  } else {
+    showToast('Erro ao salvar perfil.', 'error');
+  }
 }
 
-function pageVagas() {
-  if (!checkAuth()) return;
-  const vagas = SITF.getVagas().filter(v => v.empregadorId === currentUser.id);
+/* ── MINHAS VAGAS ───────────────────────────────── */
+async function pageVagas() {
+  if (!await checkAuth()) return;
+
+  const todasVagas = await SITF.getVagas();
+  const vagas = todasVagas.filter(v => v.empregador_id === currentUser.id);
+
   document.getElementById('pageContent').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.75rem;flex-wrap:wrap;gap:1rem">
-      <div><h2 style="font-size:1.5rem;font-weight:800">📋 Minhas Vagas</h2><p style="color:var(--text-muted);font-size:0.9rem">${vagas.length} vaga${vagas.length!==1?'s':''} publicada${vagas.length!==1?'s':''}</p></div>
+      <div>
+        <h2 style="font-size:1.5rem;font-weight:800">📋 Minhas Vagas</h2>
+        <p style="color:var(--text-muted);font-size:0.9rem">${vagas.length} vaga${vagas.length!==1?'s':''} publicada${vagas.length!==1?'s':''}</p>
+      </div>
       <button class="btn btn-primary" onclick="document.getElementById('modalNovaVaga').classList.add('open')">+ Nova vaga</button>
     </div>
     ${vagas.length ? vagas.map(v => `
-      <div class="card vaga-manage-card" style="margin-bottom:1rem">
-        <div class="company-logo" style="background:${avatarColor(v.empresa)};width:44px;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;flex-shrink:0">${initials(v.empresa)}</div>
+      <div class="card" style="padding:1.25rem;display:flex;gap:1rem;align-items:flex-start;margin-bottom:1rem">
+        <div style="width:44px;height:44px;border-radius:8px;background:${avatarColor(v.empresa)};display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;flex-shrink:0">${initials(v.empresa)}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:0.95rem;font-weight:700;margin-bottom:0.2rem">${v.title}</div>
-          <div style="font-size:0.78rem;color:var(--text-muted)">📍 ${v.cidade}${v.estado?', '+v.estado:''} · ${v.cat} · R$ ${v.preco}/${v.tipo}</div>
-          <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.2rem">${v.candidatos.length} candidato${v.candidatos.length!==1?'s':''} · publicada ${timeAgo(v.criado)}</div>
+          <div style="font-size:0.95rem;font-weight:700;margin-bottom:0.2rem">${v.titulo}</div>
+          <div style="font-size:0.78rem;color:var(--text-muted)">📍 ${v.cidade||''}${v.estado?', '+v.estado:''} · ${v.categoria} · R$ ${v.preco}/${v.tipo_preco}</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.2rem">Publicada ${timeAgo(v.criado_em)}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:0.4rem;align-items:flex-end">
-          <span class="badge badge-open">${v.status}</span>
+          <span class="badge ${v.status==='aberta'?'badge-open':'badge-closed'}">${v.status}</span>
           <button class="btn btn-secondary btn-sm" onclick="showPage('candidatos')">Ver candidatos</button>
           <button class="btn btn-danger btn-sm" onclick="encerrarVaga('${v.id}')">Encerrar</button>
         </div>
-      </div>`).join('') : '<div class="empty-state"><div class="empty-state-icon">📋</div><h3>Nenhuma vaga publicada</h3><p>Publique sua primeira vaga e encontre o freelancer ideal!</p><button class="btn btn-primary" style="margin-top:1rem" onclick="document.getElementById('modalNovaVaga').classList.add('open')">+ Publicar vaga</button></div>'}`;
+      </div>`).join('') : `
+      <div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <h3>Nenhuma vaga publicada</h3>
+        <p>Publique sua primeira vaga e encontre o freelancer ideal!</p>
+        <button class="btn btn-primary" style="margin-top:1rem"
+          onclick="document.getElementById('modalNovaVaga').classList.add('open')">+ Publicar vaga</button>
+      </div>`}`;
 }
 
-function encerrarVaga(id) {
-  const vagas = SITF.getVagas();
-  const v = vagas.find(x => x.id === id);
-  if (v) { v.status = 'encerrada'; SITF.setVagas(vagas); showToast('Vaga encerrada.', 'info'); pageVagas(); }
+async function encerrarVaga(id) {
+  const res = await SITF.updateVaga({ id, status: 'encerrada' });
+  if (res.sucesso) { showToast('Vaga encerrada.', 'info'); pageVagas(); }
+  else showToast('Erro ao encerrar vaga.', 'error');
 }
 
-function pageCandidatos() {
-  if (!checkAuth()) return;
-  const myVagas = SITF.getVagas().filter(v => v.empregadorId === currentUser.id);
-  const myVagaIds = myVagas.map(v => v.id);
-  const cands = SITF.getCandidaturas().filter(c => myVagaIds.includes(c.vagaId));
-  const users = SITF.getUsers();
+/* ── CANDIDATOS ─────────────────────────────────── */
+async function pageCandidatos() {
+  if (!await checkAuth()) return;
+
+  const [todasVagas, todosUsers] = await Promise.all([
+    SITF.getVagas(),
+    SITF.getUsers()
+  ]);
+
+  const minhasVagas = todasVagas.filter(v => v.empregador_id === currentUser.id);
+  let todasCands = [];
+  for (const v of minhasVagas) {
+    const c = await SITF.getCandidaturas({ vaga_id: v.id });
+    if (Array.isArray(c)) todasCands = todasCands.concat(c.map(x => ({ ...x, _vaga: v })));
+  }
+
   document.getElementById('pageContent').innerHTML = `
-    <div style="margin-bottom:1.75rem"><h2 style="font-size:1.5rem;font-weight:800">👥 Candidatos</h2><p style="color:var(--text-muted);font-size:0.9rem">${cands.length} candidatura${cands.length!==1?'s':''} recebida${cands.length!==1?'s':''}</p></div>
-    ${cands.length ? cands.map(c => {
-      const f = users.find(u => u.id === c.freelancerId);
-        if (!f) return '';
-        const profileLink = `<a href="perfil.html?id=${f.id}" target="_blank" class="btn btn-ghost btn-sm" title="Ver perfil público">👤</a>`;
-      const v = myVagas.find(x => x.id === c.vagaId);
-      if (!f || !v) return '';
-      return `<div class="card cand-card">
+    <div style="margin-bottom:1.75rem">
+      <h2 style="font-size:1.5rem;font-weight:800">👥 Candidatos</h2>
+      <p style="color:var(--text-muted);font-size:0.9rem">${todasCands.length} candidatura${todasCands.length!==1?'s':''} recebida${todasCands.length!==1?'s':''}</p>
+    </div>
+    ${todasCands.length ? todasCands.map(c => {
+      const f = todosUsers.find(u => u.id === c.freelancer_id);
+      const v = c._vaga;
+      if (!f) return '';
+      const badgeMap = { pendente:'badge-new', aprovado:'badge-remote', reprovado:'badge-urgent' };
+      return `<div class="card" style="padding:1rem;display:flex;gap:0.85rem;align-items:center;margin-bottom:0.6rem">
         ${avatarHTML(f.nome,'md')}
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:0.9rem">${f.nome}</div>
-          <div style="font-size:0.75rem;color:var(--text-muted)">${f.bio?f.bio.substring(0,60)+'...':''} · Vaga: ${v.title}</div>
-          <div style="font-size:0.72rem;color:var(--text-dim)">${timeAgo(c.criado)}</div>
+          <div style="font-size:0.75rem;color:var(--text-muted)">${f.bio?f.bio.substring(0,50)+'...':''}</div>
+          <div style="font-size:0.72rem;color:var(--text-dim)">Vaga: ${v.titulo} · ${timeAgo(c.criado_em)}</div>
         </div>
-        <span class="badge ${c.status==='aprovado'?'badge-remote':c.status==='reprovado'?'badge-urgent':'badge-new'}">${c.status}</span>
-        <div class="cand-actions">
+        <span class="badge ${badgeMap[c.status]||'badge-new'}">${c.status}</span>
+        <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
           <button class="btn btn-success btn-sm" onclick="atualizarCand('${c.id}','aprovado')">✓ Aprovar</button>
           <button class="btn btn-danger btn-sm" onclick="atualizarCand('${c.id}','reprovado')">✕</button>
-          <button class="btn btn-ghost btn-sm" onclick="chatWithFreela('${f.id}','${f.nome}')">💬</button>
+          <button class="btn btn-ghost btn-sm" onclick="chatWithFreela('${f.id}')">💬</button>
+          <a href="perfil.html?id=${f.id}" target="_blank" class="btn btn-ghost btn-sm">👤</a>
           <button class="btn btn-outline btn-sm" onclick="abrirAvaliar('${f.id}','${f.nome}','${v.id}')">⭐</button>
         </div>
       </div>`;
-    }).join('') : '<div class="empty-state"><div class="empty-state-icon">👥</div><h3>Nenhuma candidatura ainda</h3><p>Publique vagas para receber candidatos.</p></div>'}`;
+    }).join('') : `
+      <div class="empty-state">
+        <div class="empty-state-icon">👥</div>
+        <h3>Nenhuma candidatura ainda</h3>
+        <p>Publique vagas para receber candidatos.</p>
+      </div>`}`;
 }
 
-function atualizarCand(id, status) {
-  const cands = SITF.getCandidaturas();
-  const c = cands.find(x => x.id === id);
-  if (c) { c.status = status; SITF.setCandidaturas(cands); showToast(status==='aprovado'?'Candidato aprovado! ✅':'Candidato reprovado.','info'); pageCandidatos(); }
+async function atualizarCand(id, status) {
+  const res = await SITF.updateCandidatura({ id, status, visto: 1 });
+  if (res.sucesso) {
+    showToast(status === 'aprovado' ? 'Candidato aprovado! ✅' : 'Candidato reprovado.', 'info');
+    pageCandidatos();
+  } else {
+    showToast('Erro ao atualizar candidatura.', 'error');
+  }
 }
 
-let activeChatUser = null;
+/* ── CHAT ───────────────────────────────────────── */
+async function pageChat() {
+  if (!await checkAuth()) return;
 
-function pageChat() {
-  if (!checkAuth()) return;
-  const users = SITF.getUsers().filter(u => u.tipo === 'freelancer');
-  const myVagas = SITF.getVagas().filter(v => v.empregadorId === currentUser.id);
-  const myVagaIds = myVagas.map(v => v.id);
-  const cands = SITF.getCandidaturas().filter(c => myVagaIds.includes(c.vagaId));
-  const chatUserIds = [...new Set(cands.map(c => c.freelancerId))];
-  const chatUsers = users.filter(u => chatUserIds.includes(u.id));
-  const allMsgs = SITF.getMsgs();
+  const [todasVagas, todosUsers] = await Promise.all([
+    SITF.getVagas(),
+    SITF.getUsers()
+  ]);
 
+  const minhasVagas = todasVagas.filter(v => v.empregador_id === currentUser.id);
+  let freelancerIds = [];
+  for (const v of minhasVagas) {
+    const c = await SITF.getCandidaturas({ vaga_id: v.id });
+    if (Array.isArray(c)) freelancerIds = freelancerIds.concat(c.map(x => x.freelancer_id));
+  }
+  freelancerIds = [...new Set(freelancerIds)];
+  const chatUsers = todosUsers.filter(u => freelancerIds.includes(u.id));
   if (!activeChatUser && chatUsers.length) activeChatUser = chatUsers[0];
 
   document.getElementById('pageContent').innerHTML = `
@@ -367,8 +477,11 @@ function pageChat() {
     <div class="chat-wrap">
       <div class="chat-layout">
         <div class="chat-sidebar">
-          <div class="chat-sidebar-header">Conversas <span style="font-size:0.72rem;background:var(--purple);color:#fff;padding:0.1rem 0.5rem;border-radius:99px">${chatUsers.length}</span></div>
-          <div class="chat-contacts" id="chatContacts">
+          <div class="chat-sidebar-header">
+            Conversas
+            <span style="font-size:0.72rem;background:var(--purple);color:#fff;padding:0.1rem 0.5rem;border-radius:99px">${chatUsers.length}</span>
+          </div>
+          <div class="chat-contacts">
             ${chatUsers.length ? chatUsers.map(u => `
               <div class="contact-item ${activeChatUser&&activeChatUser.id===u.id?'active':''}" onclick="selectChatUser('${u.id}')">
                 ${avatarHTML(u.nome,'sm')}
@@ -376,180 +489,241 @@ function pageChat() {
                   <div class="contact-name">${u.nome}</div>
                   <div class="contact-preview">${u.bio?u.bio.substring(0,30)+'...':'Freelancer'}</div>
                 </div>
-                ${u.online?'<div style="width:8px;height:8px;background:var(--green);border-radius:50%;flex-shrink:0"></div>':''}
-              </div>`).join('') : '<div style="padding:1.5rem;text-align:center;font-size:0.82rem;color:var(--text-muted)">Nenhum candidato ainda.<br>Publique vagas para receber candidatos.</div>'}
+                ${u.online ? '<div style="width:8px;height:8px;background:var(--green);border-radius:50%;flex-shrink:0"></div>' : ''}
+              </div>`).join('') :
+              '<div style="padding:1.5rem;text-align:center;font-size:0.82rem;color:var(--text-muted)">Nenhum candidato ainda.</div>'}
           </div>
         </div>
         <div class="chat-main" id="chatMain">
-          ${activeChatUser ? renderChatMain(activeChatUser, allMsgs) : '<div class="empty-state" style="margin:auto"><div class="empty-state-icon">💬</div><h3>Selecione uma conversa</h3></div>'}
+          <div class="empty-state" style="margin:auto">
+            <div class="empty-state-icon">💬</div>
+            <h3>Carregando...</h3>
+          </div>
         </div>
       </div>
     </div>`;
+
+  if (activeChatUser) await renderChatMain(activeChatUser);
 }
 
-function renderChatMain(peer, allMsgs) {
+async function renderChatMain(peer) {
   const chatKey = [currentUser.id, peer.id].sort().join('_');
-  const msgs = allMsgs[chatKey] || [];
-  const now = new Date();
-  const timeStr = now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
-  return `
+  const msgs    = await SITF.getMsgs(chatKey);
+
+  document.getElementById('chatMain').innerHTML = `
     <div class="chat-header">
-      <div class="online-indicator">${avatarHTML(peer.nome,'sm')}${peer.online?'<div class="online-dot"></div>':''}</div>
+      ${avatarHTML(peer.nome,'sm')}
       <div class="chat-header-info">
         <div class="chat-peer-name">${peer.nome}</div>
-        <div class="chat-peer-status">${peer.online?'● Online agora':'Offline'}</div>
+        <div class="chat-peer-status">${peer.online ? '● Online agora' : 'Offline'}</div>
+      </div>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn btn-ghost btn-sm" onclick="showToast('📞 Iniciando chamada...','info')">📞</button>
+        <button class="btn btn-ghost btn-sm" onclick="showToast('📎 Enviar arquivo','info')">📎</button>
       </div>
     </div>
     <div class="chat-messages" id="chatMsgs">
       ${msgs.length ? msgs.map(m => `
-        <div class="message ${m.senderId===currentUser.id?'outgoing':''}">
-          ${m.senderId!==currentUser.id?avatarHTML(peer.nome,'sm'):''}
-          <div><div class="msg-bubble">${m.text}</div><div class="msg-time">${timeAgo(m.ts)}</div></div>
-          ${m.senderId===currentUser.id?avatarHTML(currentUser.nome,'sm'):''}
-        </div>`).join('') : '<div style="text-align:center;padding:2rem;font-size:0.82rem;color:var(--text-muted)">Início da conversa com ${peer.nome}</div>'}
+        <div class="message ${m.sender_id===currentUser.id?'outgoing':''}">
+          ${m.sender_id!==currentUser.id ? avatarHTML(peer.nome,'sm') : ''}
+          <div><div class="msg-bubble">${m.texto}</div><div class="msg-time">${timeAgo(m.criado_em)}</div></div>
+          ${m.sender_id===currentUser.id ? avatarHTML(currentUser.nome,'sm') : ''}
+        </div>`).join('') :
+        `<div style="text-align:center;padding:2rem;font-size:0.82rem;color:var(--text-muted)">Início da conversa com ${peer.nome}</div>`}
     </div>
     <div class="chat-composer">
-      <input class="composer-input" id="msgInputField" placeholder="Digite sua mensagem..." onkeydown="if(event.key==='Enter')sendMsg()">
+      <input class="composer-input" id="msgInputField" placeholder="Digite sua mensagem..."
+        onkeydown="if(event.key==='Enter')sendMsg()">
       <button class="send-btn" onclick="sendMsg()">➤</button>
     </div>`;
+
+  const el = document.getElementById('chatMsgs');
+  if (el) el.scrollTop = el.scrollHeight;
 }
 
-function selectChatUser(id) {
-  const users = SITF.getUsers();
+async function selectChatUser(id) {
+  const users = await SITF.getUsers();
   activeChatUser = users.find(u => u.id === id);
-  pageChat();
+  await pageChat();
 }
 
-function chatWithFreela(id, nome) {
-  const users = SITF.getUsers();
+async function chatWithFreela(id) {
+  const users = await SITF.getUsers();
   activeChatUser = users.find(u => u.id === id);
   showPage('chat');
 }
 
-function sendMsg() {
+async function sendMsg() {
   const input = document.getElementById('msgInputField');
   if (!input || !input.value.trim() || !activeChatUser) return;
-  sendChatMsg([currentUser.id, activeChatUser.id].sort().join('_'), input.value.trim(), currentUser.id);
+  const texto = input.value.trim();
   input.value = '';
-  // Auto reply
-  setTimeout(() => {
-    const replies = ['Entendido! Vou analisar sua proposta.','Perfeito, obrigado!','Posso te chamar para uma call?','Ótimo, aguardo mais detalhes.'];
-    sendChatMsg([currentUser.id, activeChatUser.id].sort().join('_'), replies[Math.floor(Math.random()*replies.length)], activeChatUser.id);
-    pageChat();
-  }, 1500);
-  pageChat();
+  await SITF.sendMsg({
+    chat_key:  [currentUser.id, activeChatUser.id].sort().join('_'),
+    sender_id: currentUser.id,
+    texto
+  });
+  await renderChatMain(activeChatUser);
 }
 
-function pageAvaliar() {
-  if (!checkAuth()) return;
-  const myVagas = SITF.getVagas().filter(v => v.empregadorId === currentUser.id);
-  const myVagaIds = myVagas.map(v => v.id);
-  const cands = SITF.getCandidaturas().filter(c => myVagaIds.includes(c.vagaId) && c.status === 'aprovado');
-  const users = SITF.getUsers();
-  const avals = SITF.getAvaliacoes();
+/* ── AVALIAR FREELANCERS ────────────────────────── */
+async function pageAvaliar() {
+  if (!await checkAuth()) return;
+
+  const [todasVagas, todosUsers, avals] = await Promise.all([
+    SITF.getVagas(),
+    SITF.getUsers(),
+    SITF.getAvaliacoes()
+  ]);
+
+  const minhasVagas = todasVagas.filter(v => v.empregador_id === currentUser.id);
+  let aprovados = [];
+  for (const v of minhasVagas) {
+    const c = await SITF.getCandidaturas({ vaga_id: v.id });
+    if (Array.isArray(c)) {
+      aprovados = aprovados.concat(c.filter(x => x.status === 'aprovado').map(x => ({ ...x, _vaga: v })));
+    }
+  }
+
   document.getElementById('pageContent').innerHTML = `
-    <div style="margin-bottom:1.75rem"><h2 style="font-size:1.5rem;font-weight:800">⭐ Avaliar Freelancers</h2><p style="color:var(--text-muted);font-size:0.9rem">Avalie os freelancers com quem você trabalhou</p></div>
-    ${cands.length ? cands.map(c => {
-      const f = users.find(u => u.id === c.freelancerId);
-      const v = myVagas.find(x => x.id === c.vagaId);
-      if (!f || !v) return '';
-      const jaAvaliou = avals.find(a => a.avaliadorId===currentUser.id && a.avaliadoId===f.id && a.vagaId===v.id);
+    <div style="margin-bottom:1.75rem">
+      <h2 style="font-size:1.5rem;font-weight:800">⭐ Avaliar Freelancers</h2>
+      <p style="color:var(--text-muted);font-size:0.9rem">Avalie os freelancers com quem você trabalhou</p>
+    </div>
+    ${aprovados.length ? aprovados.map(c => {
+      const f = todosUsers.find(u => u.id === c.freelancer_id);
+      const v = c._vaga;
+      if (!f) return '';
+      const jaAvaliou = avals.find(a =>
+        a.avaliador_id === currentUser.id &&
+        a.avaliado_id  === f.id &&
+        a.vaga_id      === v.id &&
+        a.tipo         === 'empregador_avalia_freelancer'
+      );
       return `<div class="rating-form">
         <div style="display:flex;align-items:center;gap:0.85rem;margin-bottom:0.85rem">
           ${avatarHTML(f.nome,'md')}
-          <div><div style="font-weight:600">${f.nome}</div><div style="font-size:0.75rem;color:var(--text-muted)">Vaga: ${v.title}</div></div>
-          ${jaAvaliou?`<span class="badge badge-remote" style="margin-left:auto">Avaliado ✓</span>`:`<button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="abrirAvaliar('${f.id}','${f.nome}','${v.id}')">⭐ Avaliar</button>`}
+          <div>
+            <div style="font-weight:600">${f.nome}</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">Vaga: ${v.titulo}</div>
+          </div>
+          ${jaAvaliou
+            ? '<span class="badge badge-remote" style="margin-left:auto">Avaliado ✓</span>'
+            : `<button class="btn btn-primary btn-sm" style="margin-left:auto"
+                onclick="abrirAvaliar('${f.id}','${f.nome}','${v.id}')">⭐ Avaliar</button>`}
         </div>
-        ${jaAvaliou?`<div style="font-size:0.82rem;color:var(--text-muted);font-style:italic">"${jaAvaliou.comentario}" · ${starsHTML(jaAvaliou.nota)}</div>`:''}
+        ${jaAvaliou ? `<div style="font-size:0.82rem;color:var(--text-muted);font-style:italic">"${jaAvaliou.comentario}" · ${starsHTML(parseInt(jaAvaliou.nota))}</div>` : ''}
       </div>`;
-    }).join('') : '<div class="empty-state"><div class="empty-state-icon">⭐</div><h3>Nenhum freelancer para avaliar</h3><p>Aprove candidatos para depois avaliá-los.</p></div>'}`;
+    }).join('') : `
+      <div class="empty-state">
+        <div class="empty-state-icon">⭐</div>
+        <h3>Nenhum freelancer para avaliar</h3>
+        <p>Aprove candidatos para depois avaliá-los.</p>
+      </div>`}`;
 }
 
 function abrirAvaliar(fId, fNome, vagaId) {
   document.getElementById('avalFreelancerId').value = fId;
-  document.getElementById('avalVagaId').value = vagaId;
-  document.getElementById('avalTarget').textContent = fNome;
+  document.getElementById('avalVagaId').value       = vagaId;
+  document.getElementById('avalTarget').textContent  = fNome;
   selectedStars = 0;
   document.querySelectorAll('#starInput span').forEach(s => s.classList.remove('active'));
   document.getElementById('avalComentario').value = '';
   document.getElementById('modalAvaliar').classList.add('open');
 }
 
-function enviarAvaliacao() {
-  if (!selectedStars) { showToast('Selecione uma nota (estrelas).', 'warn'); return; }
-  const fId = document.getElementById('avalFreelancerId').value;
-  const vagaId = document.getElementById('avalVagaId').value;
+async function enviarAvaliacao() {
+  if (!selectedStars) { showToast('Selecione uma nota.', 'warn'); return; }
   const comentario = document.getElementById('avalComentario').value.trim();
-  if (!comentario) { showToast('Escreva um comentário.', 'warn'); return; }
-  const avals = SITF.getAvaliacoes();
-  avals.push({ id: 'a'+Date.now(), vagaId, avaliadorId: currentUser.id, avaliadoId: fId, tipo: 'empregador_avalia_freelancer', nota: selectedStars, comentario, criado: Date.now() });
-  SITF.setAvaliacoes(avals);
+  if (!comentario)  { showToast('Escreva um comentário.', 'warn'); return; }
+  const res = await SITF.createAvaliacao({
+    vaga_id:      document.getElementById('avalVagaId').value,
+    avaliador_id: currentUser.id,
+    avaliado_id:  document.getElementById('avalFreelancerId').value,
+    tipo:         'empregador_avalia_freelancer',
+    nota:         selectedStars,
+    comentario
+  });
+  if (res.erro) { showToast(res.erro, 'error'); return; }
   document.getElementById('modalAvaliar').classList.remove('open');
   showToast('Avaliação enviada com sucesso! ⭐', 'success');
   pageAvaliar();
 }
 
-function pageMinhasAvals() {
-  if (!checkAuth()) return;
-  const avals = SITF.getAvaliacoes().filter(a => a.avaliadoId === currentUser.id && a.tipo === 'freelancer_avalia_empregador');
-  const users = SITF.getUsers();
-  const avgRating = avals.length ? (avals.reduce((s,a)=>s+a.nota,0)/avals.length).toFixed(1) : '–';
+/* ── AVALIAÇÕES RECEBIDAS ───────────────────────── */
+async function pageMinhasAvals() {
+  if (!await checkAuth()) return;
+
+  const [avals, todosUsers] = await Promise.all([
+    SITF.getAvaliacoes({ avaliado_id: currentUser.id, tipo: 'freelancer_avalia_empregador' }),
+    SITF.getUsers()
+  ]);
+
+  const avg = avals.length
+    ? (avals.reduce((s,a) => s + parseInt(a.nota), 0) / avals.length).toFixed(1)
+    : '–';
+
   document.getElementById('pageContent').innerHTML = `
     <div style="margin-bottom:1.75rem">
       <h2 style="font-size:1.5rem;font-weight:800">📝 Avaliações Recebidas</h2>
-      <p style="color:var(--text-muted);font-size:0.9rem">Média: <strong style="color:var(--amber)">${avgRating} ⭐</strong> · ${avals.length} avaliação${avals.length!==1?'ões':''}</p>
+      <p style="color:var(--text-muted);font-size:0.9rem">
+        Média: <strong style="color:var(--amber)">${avg} ⭐</strong> ·
+        ${avals.length} avaliação${avals.length!==1?'ões':''}
+      </p>
     </div>
     ${avals.length ? avals.map(a => {
-      const f = users.find(u => u.id === a.avaliadorId);
+      const f = todosUsers.find(u => u.id === a.avaliador_id);
       return `<div class="card" style="padding:1.25rem;margin-bottom:0.85rem">
         <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem">
-          ${f?avatarHTML(f.nome,'sm'):''}
-          <div><div style="font-weight:600;font-size:0.875rem">${f?f.nome:'Freelancer'}</div>
-          <div style="font-size:0.72rem;color:var(--text-dim)">${timeAgo(a.criado)}</div></div>
-          <div style="margin-left:auto;color:var(--amber);font-size:0.88rem">${starsHTML(a.nota)}</div>
+          ${f ? avatarHTML(f.nome,'sm') : ''}
+          <div>
+            <div style="font-weight:600;font-size:0.875rem">${f ? f.nome : 'Freelancer'}</div>
+            <div style="font-size:0.72rem;color:var(--text-dim)">${timeAgo(a.criado_em)}</div>
+          </div>
+          <div style="margin-left:auto;color:var(--amber)">${starsHTML(parseInt(a.nota))}</div>
         </div>
-        <p style="font-size:0.85rem;color:var(--text-muted);font-style:italic">"${a.comentario}"</p>
+        <p style="font-size:0.875rem;color:var(--text-muted);font-style:italic">"${a.comentario}"</p>
       </div>`;
-    }).join('') : '<div class="empty-state"><div class="empty-state-icon">📝</div><h3>Nenhuma avaliação recebida ainda</h3><p>Os freelancers poderão avaliar sua empresa após os serviços.</p></div>'}`;
+    }).join('') : `
+      <div class="empty-state">
+        <div class="empty-state-icon">📝</div>
+        <h3>Nenhuma avaliação recebida ainda</h3>
+        <p>Os freelancers poderão avaliar sua empresa após os serviços.</p>
+      </div>`}`;
 }
 
-function publicarVaga() {
-  if (!checkAuth()) return;
+/* ── PUBLICAR VAGA ──────────────────────────────── */
+async function publicarVaga() {
   const titulo = document.getElementById('nvTitulo').value.trim();
-  const preco = parseFloat(document.getElementById('nvPreco').value);
-  const desc = document.getElementById('nvDesc').value.trim();
+  const preco  = parseFloat(document.getElementById('nvPreco').value);
+  const desc   = document.getElementById('nvDesc').value.trim();
   if (!titulo || !preco || !desc) { showToast('Preencha os campos obrigatórios (*).', 'error'); return; }
-  const vagas = SITF.getVagas();
+
   const tags = document.getElementById('nvTags').value.split(',').map(t=>t.trim()).filter(Boolean);
-  const nova = {
-    id: 'v'+Date.now(),
-    title: titulo,
-    empresa: currentUser.nome,
-    empregadorId: currentUser.id,
-    cat: document.getElementById('nvCat').value,
-    preco, tipo: document.getElementById('nvTipo').value,
-    modalidade: document.getElementById('nvModalidade').value,
-    cidade: document.getElementById('nvCidade').value || 'Nacional',
-    estado: document.getElementById('nvEstado').value,
-    desc, tags,
-    status: 'aberta',
-    destaque: document.getElementById('nvDestaque').checked,
-    criado: Date.now(),
-    candidatos: [],
-  };
-  vagas.push(nova);
-  SITF.setVagas(vagas);
+  const res = await SITF.createVaga({
+    titulo,
+    empresa:      currentUser.nome,
+    empregador_id: currentUser.id,
+    cat:          document.getElementById('nvCat').value,
+    preco,
+    tipo:         document.getElementById('nvTipo').value,
+    modalidade:   document.getElementById('nvModalidade').value,
+    cidade:       document.getElementById('nvCidade').value || 'Nacional',
+    estado:       document.getElementById('nvEstado').value,
+    desc,
+    tags,
+    destaque:     document.getElementById('nvDestaque').checked ? 1 : 0,
+  });
+
+  if (res.erro) { showToast(res.erro, 'error'); return; }
   document.getElementById('modalNovaVaga').classList.remove('open');
   showToast('Vaga publicada com sucesso! 🎉', 'success');
   showPage('vagas');
 }
 
-// Init
+/* ── INIT ───────────────────────────────────────── */
 checkAuth();
 showPage('dashboard');
-
-// Handle hash
-if (window.location.hash === '#chat') showPage('chat');
-if (window.location.hash === '#vagas') showPage('vagas');
-</script>
+if (window.location.hash === '#chat')  showPage('chat');
+if (window.location.hash === '#vagas') showPage('vagas');</script>
 </body></html>
